@@ -1,10 +1,6 @@
 import os
 import modal
 
-# MODEL_NAME = "unsloth/Qwen3-235B-A22B-Instruct-2507-GGUF:UD-Q4_K_XL"
-MODEL_NAME = "google/gemma-4-E4B-it-qat-q4_0-gguf:Q4_0"
-# MODEL_NAME = "ggml-org/SmolLM3-3B-GGUF:Q4_K_M"
-
 GPU_TYPE = "L4"
 NUMBER_OF_GPU = 1
 
@@ -23,14 +19,14 @@ llama_cpp_image = (
     .run_commands(
         "cmake -B build -DGGML_CUDA=ON -DGGML_NATIVE=OFF",
         "cmake --build build --config Release -j 64",
-        # "cmake --build build --config Release -j${nproc}",
-        # f"cmake --build build --config Release -j {os.cpu_count()}",
         gpu="L4",
     )
+    .add_local_file(local_path="preset.ini", remote_path="/root/preset.ini", copy=True)
     .env(
         {
             "PATH": "$PATH:/root/llama.cpp/build/bin",
             "HF_XET_HIGH_PERFORMANCE": "1",
+            "LLAMA_ARG_MODELS_PRESET": "/root/preset.ini",
         }
     )
 )
@@ -44,7 +40,7 @@ app = modal.App("llama_server")
     image=llama_cpp_image,
     gpu=f"{GPU_TYPE}:{NUMBER_OF_GPU}",
     volumes={"/root/.cache/huggingface": hf_cache_vol},
-    secrets=[modal.Secret.from_name("huggingface-secret")],
+    secrets=[modal.Secret.from_name("llama-secret")],
     timeout=5 * MINUTES,
 )
 @modal.concurrent(max_inputs=10)
@@ -54,37 +50,20 @@ def serve():
 
     cmd = [
         "llama-server",
-        "-hf",
-        MODEL_NAME,
         "--host",
         "0.0.0.0",
         "--port",
         str(LLAMA_SERVER_PORT),
+        "--api-key",
+        os.environ["LLAMA_API_KEY"],
     ]
 
     subprocess.Popen(cmd)
 
 
-@app.function(
-    image=llama_cpp_image,
-    gpu=f"{GPU_TYPE}:{NUMBER_OF_GPU}",
-    volumes={"/root/.cache/huggingface": hf_cache_vol},
-)
-def benchmark():
-    import subprocess
-
-    cmd = [
-        "llama-bench",
-        "-hf",
-        MODEL_NAME,
-    ]
-
-    subprocess.run(cmd)
-
-
 @app.local_entrypoint()
 def main():
-    benchmark.remote()
+    serve.remote()
 
 
 if __name__ == "__main__":
