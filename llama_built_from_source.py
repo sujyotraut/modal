@@ -65,9 +65,27 @@ def serve():
     subprocess.Popen(cmd)
 
 
+@app.function(
+    image=llama_cpp_image,
+    gpu=f"{GPU_TYPE}:{NUMBER_OF_GPU}",
+    volumes={"/root/.cache/huggingface": hf_cache_vol},
+    secrets=[modal.Secret.from_name("llama-secret")],
+)
+def benchmark():
+    import subprocess
+
+    cmd = [
+        "llama-bench",
+        "-hf",
+        "unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL",
+    ]
+
+    subprocess.run(cmd)
+
+
 @app.local_entrypoint()
 def main():
-    serve.remote()
+    benchmark.remote()
 
 
 if __name__ == "__main__":
