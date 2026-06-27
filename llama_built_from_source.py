@@ -27,15 +27,16 @@ llama_cpp_image = (
             "PATH": "$PATH:/root/llama.cpp/build/bin",
             "HF_XET_HIGH_PERFORMANCE": "1",
             "LLAMA_ARG_MODELS_PRESET": "/root/preset.ini",
+            "LLAMA_ARG_MODELS_AUTOLOAD": "disabled",
         }
     )
 )
 
-hf_cache_vol = modal.Volume.from_name("huggingface-cache", create_if_missing=True)
+# hf_cache_vol = modal.Volume.from_name("huggingface-cache", create_if_missing=True)
 
-# hf_cache_vol = modal.Volume.from_name(
-#     name="huggingface-cache-v2", create_if_missing=True, version=2
-# )
+hf_cache_vol = modal.Volume.from_name(
+    name="huggingface-cache-v2", create_if_missing=True, version=2
+)
 
 app = modal.App("llama_server")
 
@@ -60,7 +61,6 @@ def serve():
         str(LLAMA_SERVER_PORT),
         "--api-key",
         os.environ["LLAMA_API_KEY"],
-        "--no-models-autoload",
     ]
 
     subprocess.Popen(cmd)
