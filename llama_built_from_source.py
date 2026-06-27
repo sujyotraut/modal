@@ -33,6 +33,10 @@ llama_cpp_image = (
 
 hf_cache_vol = modal.Volume.from_name("huggingface-cache", create_if_missing=True)
 
+# hf_cache_vol = modal.Volume.from_name(
+#     name="huggingface-cache-v2", create_if_missing=True, version=2
+# )
+
 app = modal.App("llama_server")
 
 
@@ -41,10 +45,10 @@ app = modal.App("llama_server")
     gpu=f"{GPU_TYPE}:{NUMBER_OF_GPU}",
     volumes={"/root/.cache/huggingface": hf_cache_vol},
     secrets=[modal.Secret.from_name("llama-secret")],
-    timeout=5 * MINUTES,
+    timeout=20 * MINUTES,
 )
 @modal.concurrent(max_inputs=10)
-@modal.web_server(port=LLAMA_SERVER_PORT, startup_timeout=10 * MINUTES)
+@modal.web_server(port=LLAMA_SERVER_PORT, startup_timeout=20 * MINUTES)
 def serve():
     import subprocess
 
