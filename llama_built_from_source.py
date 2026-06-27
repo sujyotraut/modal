@@ -60,6 +60,7 @@ def serve():
         str(LLAMA_SERVER_PORT),
         "--api-key",
         os.environ["LLAMA_API_KEY"],
+        "--no-models-autoload",
     ]
 
     subprocess.Popen(cmd)
