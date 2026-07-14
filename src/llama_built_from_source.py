@@ -1,11 +1,12 @@
 import os
 import modal
 
-GPU_TYPE = "L4"
+GPU_TYPE = "L40S"
 NUMBER_OF_GPU = 1
 
+PORT = 8080
 MINUTES = 60
-LLAMA_SERVER_PORT = 8080
+MAX_INPUTS = 10
 
 llama_cpp_image = (
     # NOTE: T4 GPU doesn't support cuda 13, only cuda 12.x
@@ -21,13 +22,11 @@ llama_cpp_image = (
         "cmake --build build --config Release -j 64",
         gpu="L4",
     )
-    .add_local_file(local_path="preset.ini", remote_path="/root/preset.ini", copy=True)
+    .add_local_file(local_path="models.ini", remote_path="/root/models.ini", copy=True)
     .env(
         {
             "PATH": "$PATH:/root/llama.cpp/build/bin",
             "HF_XET_HIGH_PERFORMANCE": "1",
-            "LLAMA_ARG_MODELS_PRESET": "/root/preset.ini",
-            "LLAMA_ARG_MODELS_AUTOLOAD": "disabled",
         }
     )
 )
@@ -48,19 +47,17 @@ app = modal.App("llama_server")
     secrets=[modal.Secret.from_name("llama-secret")],
     timeout=20 * MINUTES,
 )
-@modal.concurrent(max_inputs=10)
-@modal.web_server(port=LLAMA_SERVER_PORT, startup_timeout=20 * MINUTES)
+@modal.concurrent(max_inputs=MAX_INPUTS)
+@modal.web_server(port=PORT, startup_timeout=20 * MINUTES)
 def serve():
     import subprocess
 
     cmd = [
         "llama-server",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        str(LLAMA_SERVER_PORT),
-        "--api-key",
-        os.environ["LLAMA_API_KEY"],
+        "--host", "0.0.0.0",
+        "--port", str(PORT),
+        "--models-preset", "/root/models.ini",
+        "--api-key", os.environ["LLAMA_API_KEY"],
     ]
 
     subprocess.Popen(cmd)
@@ -75,10 +72,10 @@ def serve():
 def benchmark():
     import subprocess
 
+    # TODO: Add benchmark testing to get get maximize speed
     cmd = [
         "llama-bench",
-        "-hf",
-        "unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL",
+        "-hf", "unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL",
     ]
 
     subprocess.run(cmd)

@@ -5,9 +5,12 @@
     "ggml",
     "GGUF",
     "huggingface",
+    "lmsysorg",
     "pycache",
     "Qwen",
+    "sglang",
     "Smol",
+    "ubatch",
     "unsloth",
     "venv"
   ]
