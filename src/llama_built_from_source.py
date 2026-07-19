@@ -2,6 +2,7 @@ import os
 import modal
 
 GPU_TYPE = "L40S"
+# GPU_TYPE = "A100"
 NUMBER_OF_GPU = 1
 
 PORT = 8080
