@@ -48,11 +48,15 @@ app = modal.App("llama_server")
     gpu=f"{GPU_TYPE}:{NUMBER_OF_GPU}",
     volumes={"/root/.cache/huggingface": hf_cache_vol},
     secrets=[modal.Secret.from_name("llama-secret")],
-    timeout=20 * MINUTES,
+    # Container configuration
+    min_containers=0,
     max_containers=1,
+    timeout=30 * MINUTES,
+    startup_timeout=10 * MINUTES,
+    scaledown_window=5 * MINUTES,
 )
 @modal.concurrent(max_inputs=MAX_INPUTS)
-@modal.web_server(port=PORT, startup_timeout=20 * MINUTES)
+@modal.web_server(port=PORT, startup_timeout=10 * MINUTES)
 def serve():
     import subprocess
 
