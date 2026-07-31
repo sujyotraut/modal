@@ -1,15 +1,18 @@
 {
   "cSpell.words": [
     "cuda",
+    "cyankiwi",
     "DGGML",
     "ggml",
     "GGUF",
     "huggingface",
+    "LLAMACPP",
     "lmsysorg",
     "pycache",
     "Qwen",
     "sglang",
     "Smol",
+    "TORCHINDUCTOR",
     "ubatch",
     "unsloth",
     "venv"

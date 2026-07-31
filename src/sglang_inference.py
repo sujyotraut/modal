@@ -1,23 +1,23 @@
-import asyncio
 import subprocess
 import time
 
 import modal
-import modal.experimental
 
-GPU_TYPE = "L4"
+GPU_TYPE = "L40S"
 NUMBER_OF_GPU = 1
 
 PORT = 8080
 MINUTES = 60
 MAX_INPUTS = 8
-BATCH = ",".join(map(str, range(1, MAX_INPUTS + 1)))
+BATCH = "[" + ",".join(map(str, range(1, MAX_INPUTS + 1))) + "]"
+print(BATCH)
 
-MODEL_NAME = "Qwen/Qwen3-14B-AWQ"
+MODEL_NAME = "cyankiwi/Qwen3.6-27B-AWQ-INT4"
+MODEL_REVISION = "e5cc0400fb2403c437c2c40a7c52fb5ae93fda18"
 
 HF_CACHE_PATH = "/root/.cache/huggingface"
 HF_CACHE_VOL = modal.Volume.from_name(
-    name="huggingface-cache-v2",
+    name="huggingface-cache",
     create_if_missing=True,
     version=2
 )
@@ -89,15 +89,17 @@ CMD = [
     "--host", "0.0.0.0",
     "--port", str(PORT),
     "--model-path", MODEL_NAME,
+    "--revision", MODEL_REVISION,
     # Flash attn on by default
     # "--context-length", "8192",
     # "--context-length", "131072",
     # Completely on the GPU, no CPU offloading
     "--kv-cache-dtype", "fp8_e4m3",
     "--max-running-requests", str(MAX_INPUTS),
-    "--cuda-graph-bs-decode", "[1,2,3,4,5,6,7,8]",
+    # "--cuda-graph-bs-decode", "[1,2,3,4,5,6,7,8]",
+    # "--cuda-graph-bs-decode", BATCH,
     "--cuda-graph-max-bs-decode", str(MAX_INPUTS),
-    "--cuda-graph-backend-prefill", "disabled"
+    # "--cuda-graph-backend-prefill", "disabled"
 ]
 
 @app.cls(
