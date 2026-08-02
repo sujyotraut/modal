@@ -70,10 +70,11 @@ def serve():
 
     cmd = [
         "llama-server",
-        "--host", "0.0.0.0",
-        "--port", str(PORT),
+        "--models-max", "1",
         "--models-preset", "/root/models.ini",
         "--api-key", os.environ["LLAMA_API_KEY"],
+        "--host", "0.0.0.0",
+        "--port", str(PORT),
     ]
 
     subprocess.Popen(cmd)
