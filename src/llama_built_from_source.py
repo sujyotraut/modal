@@ -7,11 +7,11 @@ PORT = 8080
 MINUTES = 60
 MAX_INPUTS = 10
 
-# LLAMACPP_VERSION = "b10201"
-# LLAMACPP_GIT_URL = "https://github.com/ggml-org/llama.cpp.git"
+LLAMACPP_VERSION = "b10237"
+LLAMACPP_GIT_URL = "https://github.com/ggml-org/llama.cpp.git"
 
-LLAMACPP_VERSION = "tqp-v0.3.0"
-LLAMACPP_GIT_URL = "https://github.com/TheTom/llama-cpp-turboquant.git"
+# LLAMACPP_VERSION = "tqp-v0.3.0"
+# LLAMACPP_GIT_URL = "https://github.com/TheTom/llama-cpp-turboquant.git"
 
 REPO_NAME = LLAMACPP_GIT_URL.rstrip("/").split("/")[-1].removesuffix(".git")
 
@@ -26,13 +26,16 @@ llama_cpp_image = (
     .workdir(REPO_NAME)
     .run_commands(
         # Slower build and more portability since it complies for all cuda GPUs
-        # "cmake -B build -DGGML_CUDA=ON -DGGML_NATIVE=OFF",
+        "cmake -B build -DGGML_CUDA=ON -DGGML_NATIVE=OFF",
         # Faster build and less portability since it only complies for this exact GPU
         # NOTE: In practice both shows similar build time and cost but `-DGGML_CUDA=ON` 
         # shows faster inference speed (40t/s) compare to it's counterpart (35t/s)
-        "cmake -B build -DGGML_CUDA=ON",
+        # "cmake -B build -DGGML_CUDA=ON",
+        # Increasing `-j 8` more doesn't seem to affect the build time and cost on modal
+        # Without `-j 8`, the build time is slower and the cost is higher (TODO: Verify this)
         "cmake --build build --config Release -j 8",
-        gpu=GPU_TYPE,
+        # NOTE: GPU is not required when -DGGML_NATIVE=OFF
+        # gpu=GPU_TYPE,
     )
     .add_local_file(local_path="models.ini", remote_path="/root/models.ini", copy=True)
     .env({ "PATH": f"$PATH:/root/{REPO_NAME}/build/bin" })
@@ -89,16 +92,16 @@ async def main():
     url = await LlamaServer.get_url.aio()
     print(url)
 
-    deadline = time.time() + 10 * MINUTES
-    while time.time() < deadline:
-        try:
-            res = requests.get(f"{url}/v1/models", timeout=5)
-            if res.status_code == 200:
-                print(res.json())
-                break
-            print(f"Got {res.status_code}, retrying...")
-        except requests.exceptions.RequestException as e:
-            print(f"Request failed ({e}), retrying...")
-        time.sleep(5)
-    else:
-        print("Server didn't become ready in time")
+    # deadline = time.time() + 10 * MINUTES
+    # while time.time() < deadline:
+    #     try:
+    #         res = requests.get(f"{url}/v1/models", timeout=5)
+    #         if res.status_code == 200:
+    #             print(res.json())
+    #             break
+    #         print(f"Got {res.status_code}, retrying...")
+    #     except requests.exceptions.RequestException as e:
+    #         print(f"Request failed ({e}), retrying...")
+    #     time.sleep(5)
+    # else:
+    #     print("Server didn't become ready in time")
