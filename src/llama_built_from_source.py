@@ -2,12 +2,15 @@ import modal
 
 GPU_TYPE = "L40S"
 NUMBER_OF_GPU = 1
+# 16 - cost efficient
+# 64 - faster builds
+BUILD_CPU = 64
 
 PORT = 8080
 MINUTES = 60
 MAX_INPUTS = 10
 
-LLAMACPP_VERSION = "b10237"
+LLAMACPP_VERSION = "b10238"
 LLAMACPP_GIT_URL = "https://github.com/ggml-org/llama.cpp.git"
 
 # LLAMACPP_VERSION = "tqp-v0.3.0"
@@ -15,28 +18,30 @@ LLAMACPP_GIT_URL = "https://github.com/ggml-org/llama.cpp.git"
 
 REPO_NAME = LLAMACPP_GIT_URL.rstrip("/").split("/")[-1].removesuffix(".git")
 
+def build_llamacpp():
+    import subprocess
+
+    print(f"Building {REPO_NAME} from source...")
+
+    subprocess.run(
+        ["cmake", "-B", "build", "-DGGML_CUDA=ON", "-DGGML_NATIVE=OFF"],
+        check=True
+    )
+
+    subprocess.run(
+        ["cmake", "--build", "build", "--config", "Release", "-j", str(BUILD_CPU)],
+        check=True
+    )
+
 llama_cpp_image = (
     # NOTE: T4 GPU doesn't support cuda 13, only cuda 12.x
-    # modal.Image.from_registry("nvidia/cuda:12.9.0-devel-ubuntu22.04", add_python="3.12")
     modal.Image.from_registry("nvidia/cuda:13.3.1-devel-ubuntu26.04", add_python="3.14")
     .entrypoint([])
     .workdir("/root")
     .apt_install("git", "cmake", "build-essential", "libssl-dev", "curl", "ccache", "nodejs", "npm")
     .run_commands(f"git clone --branch {LLAMACPP_VERSION} --depth 1 {LLAMACPP_GIT_URL}")
     .workdir(REPO_NAME)
-    .run_commands(
-        # Slower build and more portability since it complies for all cuda GPUs
-        "cmake -B build -DGGML_CUDA=ON -DGGML_NATIVE=OFF",
-        # Faster build and less portability since it only complies for this exact GPU
-        # NOTE: In practice both shows similar build time and cost but `-DGGML_CUDA=ON` 
-        # shows faster inference speed (40t/s) compare to it's counterpart (35t/s)
-        # "cmake -B build -DGGML_CUDA=ON",
-        # Increasing `-j 8` more doesn't seem to affect the build time and cost on modal
-        # Without `-j 8`, the build time is slower and the cost is higher (TODO: Verify this)
-        "cmake --build build --config Release -j 8",
-        # NOTE: GPU is not required when -DGGML_NATIVE=OFF
-        # gpu=GPU_TYPE,
-    )
+    .run_function(build_llamacpp, cpu=BUILD_CPU)
     .add_local_file(local_path="models.ini", remote_path="/root/models.ini", copy=True)
     .env({ "PATH": f"$PATH:/root/{REPO_NAME}/build/bin" })
 )
@@ -92,16 +97,16 @@ async def main():
     url = await LlamaServer.get_url.aio()
     print(url)
 
-    # deadline = time.time() + 10 * MINUTES
-    # while time.time() < deadline:
-    #     try:
-    #         res = requests.get(f"{url}/v1/models", timeout=5)
-    #         if res.status_code == 200:
-    #             print(res.json())
-    #             break
-    #         print(f"Got {res.status_code}, retrying...")
-    #     except requests.exceptions.RequestException as e:
-    #         print(f"Request failed ({e}), retrying...")
-    #     time.sleep(5)
-    # else:
-    #     print("Server didn't become ready in time")
+    deadline = time.time() + 10 * MINUTES
+    while time.time() < deadline:
+        try:
+            res = requests.get(f"{url}/v1/models", timeout=5)
+            if res.status_code == 200:
+                print(res.json())
+                break
+            print(f"Got {res.status_code}, retrying...")
+        except requests.exceptions.RequestException as e:
+            print(f"Request failed ({e}), retrying...")
+        time.sleep(5)
+    else:
+        print("Server didn't become ready in time")
