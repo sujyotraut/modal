@@ -7,8 +7,13 @@ PORT = 8080
 MINUTES = 60
 MAX_INPUTS = 10
 
-LLAMACPP_VERSION = "b10201"
-LLAMACPP_GIT_URL = "https://github.com/ggml-org/llama.cpp"
+# LLAMACPP_VERSION = "b10201"
+# LLAMACPP_GIT_URL = "https://github.com/ggml-org/llama.cpp.git"
+
+LLAMACPP_VERSION = "tqp-v0.3.0"
+LLAMACPP_GIT_URL = "https://github.com/TheTom/llama-cpp-turboquant.git"
+
+REPO_NAME = LLAMACPP_GIT_URL.rstrip("/").split("/")[-1].removesuffix(".git")
 
 llama_cpp_image = (
     # NOTE: T4 GPU doesn't support cuda 13, only cuda 12.x
@@ -16,9 +21,9 @@ llama_cpp_image = (
     modal.Image.from_registry("nvidia/cuda:13.3.1-devel-ubuntu26.04", add_python="3.14")
     .entrypoint([])
     .workdir("/root")
-    .apt_install("git", "cmake", "build-essential", "libssl-dev", "curl", "ccache")
+    .apt_install("git", "cmake", "build-essential", "libssl-dev", "curl", "ccache", "nodejs", "npm")
     .run_commands(f"git clone --branch {LLAMACPP_VERSION} --depth 1 {LLAMACPP_GIT_URL}")
-    .workdir("llama.cpp")
+    .workdir(REPO_NAME)
     .run_commands(
         # Slower build and more portability since it complies for all cuda GPUs
         # "cmake -B build -DGGML_CUDA=ON -DGGML_NATIVE=OFF",
@@ -26,11 +31,11 @@ llama_cpp_image = (
         # NOTE: In practice both shows similar build time and cost but `-DGGML_CUDA=ON` 
         # shows faster inference speed (40t/s) compare to it's counterpart (35t/s)
         "cmake -B build -DGGML_CUDA=ON",
-        "cmake --build build --config Release -j 64",
+        "cmake --build build --config Release -j 8",
         gpu=GPU_TYPE,
     )
     .add_local_file(local_path="models.ini", remote_path="/root/models.ini", copy=True)
-    .env({ "PATH": "$PATH:/root/llama.cpp/build/bin" })
+    .env({ "PATH": f"$PATH:/root/{REPO_NAME}/build/bin" })
 )
 
 hf_cache_vol = modal.Volume.from_name(
