@@ -1,9 +1,7 @@
-import os
 import modal
 
-NUMBER_OF_GPU = 1
 GPU_TYPE = "L40S"
-# GPU_TYPE = "A100"
+NUMBER_OF_GPU = 1
 
 PORT = 8080
 MINUTES = 60
@@ -32,12 +30,7 @@ llama_cpp_image = (
         gpu=GPU_TYPE,
     )
     .add_local_file(local_path="models.ini", remote_path="/root/models.ini", copy=True)
-    .env(
-        {
-            "PATH": "$PATH:/root/llama.cpp/build/bin",
-            "HF_XET_HIGH_PERFORMANCE": "1",
-        }
-    )
+    .env({ "PATH": "$PATH:/root/llama.cpp/build/bin" })
 )
 
 hf_cache_vol = modal.Volume.from_name(
@@ -52,7 +45,7 @@ app = modal.App("llama-server")
     image=llama_cpp_image,
     gpu=f"{GPU_TYPE}:{NUMBER_OF_GPU}",
     volumes={"/root/.cache/huggingface": hf_cache_vol},
-    secrets=[modal.Secret.from_name("llama-secret")],
+    secrets=[modal.Secret.from_name("llama-server-secret")],
     # Container configuration
     port=PORT,
     min_containers=0,
@@ -72,10 +65,9 @@ class LlamaServer:
         subprocess.Popen([
             "llama-server",
             "--models-max", "1",
-            "--models-preset", "/root/models.ini",
-            "--api-key", os.environ["LLAMA_API_KEY"],
             "--host", "0.0.0.0",
             "--port", str(PORT),
+            "--models-preset", "/root/models.ini",
         ])
 
     @modal.exit()
