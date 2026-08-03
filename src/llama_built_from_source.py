@@ -9,6 +9,8 @@ BUILD_CPU = 64
 PORT = 8080
 MINUTES = 60
 MAX_INPUTS = 10
+STARTUP_TIMEOUT = 10 * MINUTES
+SCALEDOWN_WINDOW = 1 * MINUTES
 
 LLAMACPP_VERSION = "b10238"
 LLAMACPP_GIT_URL = "https://github.com/ggml-org/llama.cpp.git"
@@ -39,6 +41,7 @@ llama_cpp_image = (
     .entrypoint([])
     .workdir("/root")
     .apt_install("git", "cmake", "build-essential", "libssl-dev", "curl", "ccache", "nodejs", "npm")
+    .uv_pip_install("requests")
     .run_commands(f"git clone --branch {LLAMACPP_VERSION} --depth 1 {LLAMACPP_GIT_URL}")
     .workdir(REPO_NAME)
     .run_function(build_llamacpp, cpu=BUILD_CPU)
@@ -59,17 +62,19 @@ app = modal.App("llama-server")
     gpu=f"{GPU_TYPE}:{NUMBER_OF_GPU}",
     volumes={"/root/.cache/huggingface": hf_cache_vol},
     secrets=[modal.Secret.from_name("llama-server-secret")],
+    experimental_options={"enable_gpu_snapshot": True},
+    enable_memory_snapshot=True,
     # Container configuration
     port=PORT,
     min_containers=0,
     max_containers=1,
-    startup_timeout=10 * MINUTES,
-    scaledown_window=1 * MINUTES,
+    unauthenticated=True,
     target_concurrency=MAX_INPUTS,
-    unauthenticated=True
+    startup_timeout=STARTUP_TIMEOUT,
+    scaledown_window=SCALEDOWN_WINDOW,
 )
 class LlamaServer:
-    @modal.enter()
+    @modal.enter(snap=True)
     def enter(self):
         import subprocess
 
@@ -83,30 +88,36 @@ class LlamaServer:
             "--models-preset", "/root/models.ini",
         ])
 
+        url = f"http://127.0.0.1:{PORT}"
+        server_health_check(url)
+
     @modal.exit()
     def exit(self):
         print("Exiting Llama server...")
 
-@app.local_entrypoint()
-async def main():
+
+def server_health_check(url: str) -> bool:
     import time
     import requests
 
-    print("Starting llama server...")
-
-    url = await LlamaServer.get_url.aio()
-    print(url)
-
-    deadline = time.time() + 10 * MINUTES
+    deadline = time.time() + STARTUP_TIMEOUT
     while time.time() < deadline:
         try:
-            res = requests.get(f"{url}/v1/models", timeout=5)
+            res = requests.get(f"{url}/health", timeout=5)
             if res.status_code == 200:
-                print(res.json())
-                break
+                return True
             print(f"Got {res.status_code}, retrying...")
         except requests.exceptions.RequestException as e:
             print(f"Request failed ({e}), retrying...")
         time.sleep(5)
-    else:
-        print("Server didn't become ready in time")
+    
+    print(f"Startup timeout ({STARTUP_TIMEOUT/60} minutes) reached, server health check failed.")
+    return False
+
+
+@app.local_entrypoint()
+async def main():
+    print("Starting llama server...")
+
+    url = LlamaServer.get_url()
+    server_health_check(url)
