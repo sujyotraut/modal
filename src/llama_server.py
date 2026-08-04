@@ -1,15 +1,24 @@
 import modal
 
-GPU_TYPE = "L40S"
-NUMBER_OF_GPU = 1
 # 16 - cost efficient
 # 64 - faster builds
 BUILD_CPU = 64
 
+L4_PARALLEL = 2
+L4_UBATCH_SIZE = 512
+L4_BATCH_SIZE = L4_UBATCH_SIZE * L4_PARALLEL
+
+L40S_PARALLEL = 4
+L40S_UBATCH_SIZE = 1024
+L40S_BATCH_SIZE = L40S_UBATCH_SIZE * L40S_PARALLEL
+
 PORT = 8080
 MINUTES = 60
 MAX_INPUTS = 10
-STARTUP_TIMEOUT = 10 * MINUTES
+MIN_CONTAINERS = 0
+MAX_CONTAINERS = 1
+UNAUTHENTICATED = True
+STARTUP_TIMEOUT = 5 * MINUTES
 SCALEDOWN_WINDOW = 1 * MINUTES
 
 LLAMACPP_VERSION = "b10238"
@@ -58,45 +67,90 @@ hf_cache_vol = modal.Volume.from_name(
 app = modal.App("llama-server")
 
 @app.server(
+    port=PORT,
+    gpu="L4:1",
     image=llama_cpp_image,
-    gpu=f"{GPU_TYPE}:{NUMBER_OF_GPU}",
     volumes={"/root/.cache/huggingface": hf_cache_vol},
     secrets=[modal.Secret.from_name("llama-server-secret")],
     experimental_options={"enable_gpu_snapshot": True},
     enable_memory_snapshot=True,
     # Container configuration
-    port=PORT,
-    min_containers=0,
-    max_containers=1,
-    unauthenticated=True,
+    min_containers=MIN_CONTAINERS,
+    max_containers=MAX_CONTAINERS,
     target_concurrency=MAX_INPUTS,
+    unauthenticated=UNAUTHENTICATED,
     startup_timeout=STARTUP_TIMEOUT,
     scaledown_window=SCALEDOWN_WINDOW,
 )
-class LlamaServer:
+class L4:
     @modal.enter(snap=True)
     def enter(self):
         import subprocess
 
-        print("Entering Llama server...")
+        print("Entering Llama server (L4)...")
 
         subprocess.Popen([
             "llama-server",
-            "--models-max", "1",
             "--host", "0.0.0.0",
             "--port", str(PORT),
+            "--models-max", "1",
+            "--parallel", str(L4_PARALLEL),
+            "--batch-size", str(L4_BATCH_SIZE),
+            "--ubatch-size", str(L4_UBATCH_SIZE),
             "--models-preset", "/root/models.ini",
         ])
 
         url = f"http://127.0.0.1:{PORT}"
-        server_health_check(url)
+        health_check(url)
 
     @modal.exit()
     def exit(self):
-        print("Exiting Llama server...")
+        print("Exiting Llama server (L4)...")
 
 
-def server_health_check(url: str) -> bool:
+@app.server(
+    port=PORT,
+    gpu="L40S:1",
+    image=llama_cpp_image,
+    volumes={"/root/.cache/huggingface": hf_cache_vol},
+    secrets=[modal.Secret.from_name("llama-server-secret")],
+    experimental_options={"enable_gpu_snapshot": True},
+    enable_memory_snapshot=True,
+    # Container configuration
+    min_containers=MIN_CONTAINERS,
+    max_containers=MAX_CONTAINERS,
+    target_concurrency=MAX_INPUTS,
+    unauthenticated=UNAUTHENTICATED,
+    startup_timeout=STARTUP_TIMEOUT,
+    scaledown_window=SCALEDOWN_WINDOW,
+)
+class L40S:
+    @modal.enter(snap=True)
+    def enter(self):
+        import subprocess
+
+        print("Entering Llama server (L40S)...")
+
+        subprocess.Popen([
+            "llama-server",
+            "--host", "0.0.0.0",
+            "--port", str(PORT),
+            "--models-max", "1",
+            "--parallel", str(L40S_PARALLEL),
+            "--batch-size", str(L40S_BATCH_SIZE),
+            "--ubatch-size", str(L40S_UBATCH_SIZE),
+            "--models-preset", "/root/models.ini",
+        ])
+
+        url = f"http://127.0.0.1:{PORT}"
+        health_check(url)
+
+    @modal.exit()
+    def exit(self):
+        print("Exiting Llama server (L40S)...")
+
+
+def health_check(url: str) -> bool:
     import time
     import requests
 
@@ -119,5 +173,8 @@ def server_health_check(url: str) -> bool:
 async def main():
     print("Starting llama server...")
 
-    url = LlamaServer.get_url()
-    server_health_check(url)
+    l4_url = L4.get_url()
+    health_check(l4_url)
+
+    l40s_url = L40S.get_url()
+    health_check(l40s_url)
