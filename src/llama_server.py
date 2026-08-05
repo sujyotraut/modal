@@ -1,16 +1,34 @@
+from dataclasses import dataclass
+import requests
 import modal
+import time
+import os
+
+@dataclass
+class ServerConfig:
+    parallel: int
+    ubatch_size: int
+    preload_model: str
+
+    @property
+    def batch_size(self) -> int:
+        return self.ubatch_size * self.parallel
 
 # 16 - cost efficient
 # 64 - faster builds
 BUILD_CPU = 64
 
-L4_PARALLEL = 2
-L4_UBATCH_SIZE = 512
-L4_BATCH_SIZE = L4_UBATCH_SIZE * L4_PARALLEL
+l4_config = ServerConfig(
+    parallel=2,
+    ubatch_size=512,
+    preload_model="GLM-4.7-Flash"
+)
 
-L40S_PARALLEL = 4
-L40S_UBATCH_SIZE = 1024
-L40S_BATCH_SIZE = L40S_UBATCH_SIZE * L40S_PARALLEL
+l40s_config = ServerConfig(
+    parallel=4,
+    ubatch_size=1024,
+    preload_model="GLM-4.7-Flash"
+)
 
 PORT = 8080
 MINUTES = 60
@@ -18,7 +36,7 @@ MAX_INPUTS = 10
 MIN_CONTAINERS = 0
 MAX_CONTAINERS = 1
 UNAUTHENTICATED = True
-STARTUP_TIMEOUT = 5 * MINUTES
+STARTUP_TIMEOUT = 10 * MINUTES
 SCALEDOWN_WINDOW = 1 * MINUTES
 
 LLAMACPP_VERSION = "b10238"
@@ -85,23 +103,7 @@ app = modal.App("llama-server")
 class L4:
     @modal.enter(snap=True)
     def enter(self):
-        import subprocess
-
-        print("Entering Llama server (L4)...")
-
-        subprocess.Popen([
-            "llama-server",
-            "--host", "0.0.0.0",
-            "--port", str(PORT),
-            "--models-max", "1",
-            "--parallel", str(L4_PARALLEL),
-            "--batch-size", str(L4_BATCH_SIZE),
-            "--ubatch-size", str(L4_UBATCH_SIZE),
-            "--models-preset", "/root/models.ini",
-        ])
-
-        url = f"http://127.0.0.1:{PORT}"
-        health_check(url)
+        start_server(l4_config)
 
     @modal.exit()
     def exit(self):
@@ -127,45 +129,54 @@ class L4:
 class L40S:
     @modal.enter(snap=True)
     def enter(self):
-        import subprocess
-
-        print("Entering Llama server (L40S)...")
-
-        subprocess.Popen([
-            "llama-server",
-            "--host", "0.0.0.0",
-            "--port", str(PORT),
-            "--models-max", "1",
-            "--parallel", str(L40S_PARALLEL),
-            "--batch-size", str(L40S_BATCH_SIZE),
-            "--ubatch-size", str(L40S_UBATCH_SIZE),
-            "--models-preset", "/root/models.ini",
-        ])
-
-        url = f"http://127.0.0.1:{PORT}"
-        health_check(url)
+        start_server(l40s_config)
 
     @modal.exit()
     def exit(self):
         print("Exiting Llama server (L40S)...")
 
+def start_server(config :ServerConfig):
+    import subprocess
 
-def health_check(url: str) -> bool:
-    import time
-    import requests
+    print("Entering Llama server...")
 
+    subprocess.Popen([
+        "llama-server",
+        "--host", "0.0.0.0",
+        "--port", str(PORT),
+        "--models-max", "1",
+        "--parallel", str(config.parallel),
+        "--batch-size", str(config.batch_size),
+        "--ubatch-size", str(config.ubatch_size),
+        "--models-preset", "/root/models.ini",
+    ])
+
+    url = f"http://127.0.0.1:{PORT}"
+    api_key = os.environ["LLAMA_API_KEY"]
+    health_check(url, api_key)
+
+
+def health_check(url: str, api_key: str) -> bool:
     deadline = time.time() + STARTUP_TIMEOUT
+    attempt = 0
+
+    print("Starting health check")
     while time.time() < deadline:
         try:
-            res = requests.get(f"{url}/health", timeout=5)
-            if res.status_code == 200:
+            headers = { "Authorization": f"Bearer {api_key}"}
+            res = requests.get(f"{url}/health", headers=headers, timeout=1)
+            if res.ok:
+                print(f"Health check, passed [attempt={attempt}, status_code={res.status_code}]")
                 return True
-            print(f"Got {res.status_code}, retrying...")
-        except requests.exceptions.RequestException as e:
-            print(f"Request failed ({e}), retrying...")
-        time.sleep(5)
-    
-    print(f"Startup timeout ({STARTUP_TIMEOUT/60} minutes) reached, server health check failed.")
+
+            print(f"Health check, unhealthy [attempt={attempt}, status_code={res.status_code}]")
+        except requests.exceptions.RequestException:
+            print(f"Health check, unreachable [attempt={attempt}]")
+
+        attempt += 1
+        time.sleep(2)
+
+    print(f"Health check, failed [attempt={attempt}, timeout={STARTUP_TIMEOUT}]")
     return False
 
 
@@ -173,8 +184,6 @@ def health_check(url: str) -> bool:
 async def main():
     print("Starting llama server...")
 
-    l4_url = L4.get_url()
-    health_check(l4_url)
-
-    l40s_url = L40S.get_url()
-    health_check(l40s_url)
+    api_key = "MY_API_KEY"
+    l4_url = await L4.get_url.aio()
+    health_check(l4_url, api_key)
