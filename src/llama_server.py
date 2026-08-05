@@ -39,7 +39,7 @@ UNAUTHENTICATED = True
 STARTUP_TIMEOUT = 10 * MINUTES
 SCALEDOWN_WINDOW = 1 * MINUTES
 
-LLAMACPP_VERSION = "b10238"
+LLAMACPP_VERSION = "b10280"
 LLAMACPP_GIT_URL = "https://github.com/ggml-org/llama.cpp.git"
 
 # LLAMACPP_VERSION = "tqp-v0.3.0"
@@ -164,12 +164,12 @@ def health_check(url: str, api_key: str) -> bool:
     while time.time() < deadline:
         try:
             headers = { "Authorization": f"Bearer {api_key}"}
-            res = requests.get(f"{url}/health", headers=headers, timeout=1)
-            if res.ok:
-                print(f"Health check, passed [attempt={attempt}, status_code={res.status_code}]")
+            response = requests.get(f"{url}/health", headers=headers, timeout=1)
+            if response.ok:
+                print(f"Health check, passed [attempt={attempt}, status_code={response.status_code}]")
                 return True
 
-            print(f"Health check, unhealthy [attempt={attempt}, status_code={res.status_code}]")
+            print(f"Health check, unhealthy [attempt={attempt}, status_code={response.status_code}]")
         except requests.exceptions.RequestException:
             print(f"Health check, unreachable [attempt={attempt}]")
 
