@@ -10,10 +10,14 @@ PORT = 8080
 MINUTES = 60
 MAX_INPUTS = 8
 BATCH = "[" + ",".join(map(str, range(1, MAX_INPUTS + 1))) + "]"
-print(BATCH)
+
+SGLANG_VERSION = "v0.5.16"
 
 MODEL_NAME = "cyankiwi/Qwen3.6-27B-AWQ-INT4"
-MODEL_REVISION = "e5cc0400fb2403c437c2c40a7c52fb5ae93fda18"
+# MODEL_REVISION = "e5cc0400fb2403c437c2c40a7c52fb5ae93fda18"
+
+# MODEL_NAME = "cyankiwi/GLM-4.7-Flash-AWQ-4bit"
+# MODEL_REVISION = "25624b53414e585bcf7dcb9584667c3106c6089b"
 
 HF_CACHE_PATH = "/root/.cache/huggingface"
 HF_CACHE_VOL = modal.Volume.from_name(
@@ -24,7 +28,7 @@ HF_CACHE_VOL = modal.Volume.from_name(
 
 sglang_image = (
     # NOTE: T4 GPU doesn't support cuda 13, only cuda 12.x
-    modal.Image.from_registry("lmsysorg/sglang:latest")
+    modal.Image.from_registry(f"lmsysorg/sglang:{SGLANG_VERSION}-cu130-runtime")
     .entrypoint([])
     .run_commands(f"rm -rf {HF_CACHE_PATH}")
     .env(
@@ -36,7 +40,7 @@ sglang_image = (
     )
 )
 
-app = modal.App("sglang_server")
+app = modal.App("sglang-server")
 
 with sglang_image.imports():
     import requests
@@ -84,38 +88,31 @@ def check_running(p: subprocess.Popen):
     if (rc := p.poll()) is not None:
         raise subprocess.CalledProcessError(rc, cmd=p.args)
 
-CMD = [
-    "sglang", "serve",
-    "--host", "0.0.0.0",
-    "--port", str(PORT),
-    "--model-path", MODEL_NAME,
-    "--revision", MODEL_REVISION,
-    # Flash attn on by default
-    # "--context-length", "8192",
-    # "--context-length", "131072",
-    # Completely on the GPU, no CPU offloading
-    "--kv-cache-dtype", "fp8_e4m3",
-    "--max-running-requests", str(MAX_INPUTS),
-    # "--cuda-graph-bs-decode", "[1,2,3,4,5,6,7,8]",
-    # "--cuda-graph-bs-decode", BATCH,
-    "--cuda-graph-max-bs-decode", str(MAX_INPUTS),
-    # "--cuda-graph-backend-prefill", "disabled"
-]
-
-@app.cls(
+@app.server(
+    port=PORT,
+    max_containers=1,
     image=sglang_image,
+    unauthenticated=True,
+    enable_memory_snapshot=True,
+    startup_timeout=30 * MINUTES,
+    target_concurrency=MAX_INPUTS,
     gpu=f"{GPU_TYPE}:{NUMBER_OF_GPU}",
     volumes={HF_CACHE_PATH: HF_CACHE_VOL},
-    timeout=20 * MINUTES,
-    enable_memory_snapshot=True,
     experimental_options={"enable_gpu_snapshot": True},
-    max_containers=1,
 )
-@modal.concurrent(max_inputs=MAX_INPUTS)
 class SGLangServer:
     @modal.enter(snap=True)
     def init_sglang(self):
-        self.process = subprocess.Popen(CMD)
+        self.process = subprocess.Popen([
+            "sglang", "serve",
+            "--model-path", MODEL_NAME,
+            "--tp-size", "1",
+            "--reasoning-parser", "qwen3",
+            "--mem-fraction-static", "0.8",
+            "--host", "0.0.0.0",
+            "--port", str(PORT),
+        ])
+
         print("Waiting for SGLang server to be ready...")
         wait_ready(self.process)
         print("SGLang server is ready. Warming up...")
@@ -128,35 +125,6 @@ class SGLangServer:
         print("Waking up SGLang server...")
         wake_up()
 
-    @modal.web_server(port=PORT, startup_timeout=20 * MINUTES)
-    def serve(self):
-        pass
-
     @modal.exit()
     def stop(self):
         self.process.terminate()
-
-# @app.function(
-#     image=sglang_image,
-#     gpu=f"{GPU_TYPE}:{NUMBER_OF_GPU}",
-#     volumes={HF_CACHE_PATH: HF_CACHE_VOL},
-#     timeout=20 * MINUTES,
-# )
-# @modal.concurrent(max_inputs=10)
-# @modal.web_server(port=SGLANG_SERVER_PORT, startup_timeout=20 * MINUTES)
-# def serve():
-#     import subprocess
-
-#     cmd = [
-#         "sglang", "serve",
-#         "--host", "0.0.0.0",
-#         "--port", str(SGLANG_SERVER_PORT),
-#         "--model-path", MODEL_NAME,
-#         # Flash attn on by default
-#         # "--context-length", "8192",
-#         # "--context-length", "131072",
-#         # Completely on the GPU, no CPU offloading
-#         "--kv-cache-dtype", "fp8_e4m3",
-#     ]
-
-#     subprocess.Popen(cmd)
