@@ -135,6 +135,36 @@ class L40S:
     def exit(self):
         print("Exiting Llama server (L40S)...")
 
+
+@app.server(
+    port=PORT,
+    gpu="B300:1",
+    image=llama_cpp_image,
+    volumes={"/root/.cache/huggingface": hf_cache_vol},
+    secrets=[modal.Secret.from_name("llama-server-secret")],
+    experimental_options={"enable_gpu_snapshot": True},
+    enable_memory_snapshot=True,
+    # Container configuration
+    min_containers=MIN_CONTAINERS,
+    max_containers=MAX_CONTAINERS,
+    target_concurrency=MAX_INPUTS,
+    unauthenticated=UNAUTHENTICATED,
+    startup_timeout=STARTUP_TIMEOUT,
+    scaledown_window=SCALEDOWN_WINDOW,
+)
+class B300:
+    @modal.enter(snap=True)
+    def enter(self):
+        start_server(ServerConfig(
+            parallel=4,
+            ubatch_size=2048,
+            preload_model="GLM-4.7-Flash"
+        ))
+
+    @modal.exit()
+    def exit(self):
+        print("Exiting Llama server (B300)...")
+
 def start_server(config :ServerConfig):
     import subprocess
 
