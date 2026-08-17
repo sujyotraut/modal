@@ -15,7 +15,7 @@ models.ini — model configuration.
 pyproject.toml — Python project and dependency configuration.
 
 The goal is to keep model startup and serving logic separated, making it easier to deploy models without maintaining dedicated GPU infrastructure.
-
+ 
 Project Structure
 .
 ├── src/
