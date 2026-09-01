@@ -39,7 +39,7 @@ UNAUTHENTICATED = True
 STARTUP_TIMEOUT = 10 * MINUTES
 SCALEDOWN_WINDOW = 1 * MINUTES
 
-LLAMACPP_VERSION = "v0.3.0"
+LLAMACPP_VERSION = "xsn/dflash2"
 LLAMACPP_GIT_URL = "https://github.com/ggml-org/llama.cpp.git"
 
 # LLAMACPP_VERSION = "tqp-v0.3.0"
