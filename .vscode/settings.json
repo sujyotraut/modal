@@ -3,6 +3,7 @@
     "cuda",
     "cyankiwi",
     "DGGML",
+    "DLLAMA",
     "dspark",
     "ggml",
     "GGUF",

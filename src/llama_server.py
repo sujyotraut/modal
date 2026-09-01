@@ -39,7 +39,7 @@ UNAUTHENTICATED = True
 STARTUP_TIMEOUT = 10 * MINUTES
 SCALEDOWN_WINDOW = 1 * MINUTES
 
-LLAMACPP_VERSION = "b10456"
+LLAMACPP_VERSION = "v0.3.0"
 LLAMACPP_GIT_URL = "https://github.com/ggml-org/llama.cpp.git"
 
 # LLAMACPP_VERSION = "tqp-v0.3.0"
@@ -53,7 +53,7 @@ def build_llamacpp():
     print(f"Building {REPO_NAME} from source...")
 
     subprocess.run(
-        ["cmake", "-B", "build", "-DGGML_CUDA=ON", "-DGGML_NATIVE=OFF"],
+        ["cmake", "-B", "build", "-DGGML_CUDA=ON", "-DGGML_NATIVE=OFF", "-DLLAMA_BUILD_IS_DEV=OFF"],
         check=True
     )
 
