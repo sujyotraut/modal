@@ -8,7 +8,6 @@ import os
 class ServerConfig:
     parallel: int
     ubatch_size: int
-    preload_model: str
 
     @property
     def batch_size(self) -> int:
@@ -21,13 +20,11 @@ BUILD_CPU = 64
 l4_config = ServerConfig(
     parallel=2,
     ubatch_size=512,
-    preload_model="GLM-4.7-Flash"
 )
 
 l40s_config = ServerConfig(
     parallel=4,
     ubatch_size=1024,
-    preload_model="GLM-4.7-Flash"
 )
 
 PORT = 8080
