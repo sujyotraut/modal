@@ -108,8 +108,8 @@ async def main():
     image=llama_cpp_image,
     volumes={"/root/.cache/huggingface": hf_cache_vol},
     secrets=[modal.Secret.from_name("llama-server-secret")],
-    experimental_options={"enable_gpu_snapshot": True},
-    enable_memory_snapshot=True,
+    # experimental_options={"enable_gpu_snapshot": True},
+    # enable_memory_snapshot=True,
     # Container configuration
     min_containers=MIN_CONTAINERS,
     max_containers=MAX_CONTAINERS,
@@ -119,7 +119,8 @@ async def main():
     scaledown_window=SCALEDOWN_WINDOW,
 )
 class Server:
-    @modal.enter(snap=True)
+    # @modal.enter(snap=True)
+    @modal.enter()
     def enter(self):
         start_server()
 
