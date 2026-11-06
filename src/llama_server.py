@@ -7,6 +7,9 @@ UBATCH_SIZE = 1024
 GPU_TYPE = "L40S"
 AUTOLOAD_MODEL = "Qwen3.8-27B"
 
+LLAMA_VERSION = "b12110"
+LLAMACPP_INSTALL_SCRIPT = f"curl -LsSf https://llama.app/install.sh | sh"
+
 PORT = 9931
 MINUTES = 60
 MAX_INPUTS = 10
@@ -16,8 +19,11 @@ UNAUTHENTICATED = True
 STARTUP_TIMEOUT = 10 * MINUTES
 SCALEDOWN_WINDOW = 1 * MINUTES
 
-LLAMA_VERSION = "b12110"
-LLAMACPP_INSTALL_SCRIPT = f"curl -LsSf https://llama.app/install.sh | sh"
+hf_cache_vol = modal.Volume.from_name(
+    name="huggingface-cache-gguf",
+    create_if_missing=True,
+    version=2
+)
 
 llama_cpp_image = (
     # NOTE: T4 GPU doesn't support cuda 13, only cuda 12.x
@@ -29,12 +35,6 @@ llama_cpp_image = (
     .run_commands(LLAMACPP_INSTALL_SCRIPT, gpu=f"{GPU_TYPE}:1")
     .add_local_file(local_path="models.ini", remote_path="/root/models.ini", copy=True)
     .env({ "PATH": f"$PATH:/root/.local/bin" })
-)
-
-hf_cache_vol = modal.Volume.from_name(
-    name="huggingface-cache-gguf",
-    create_if_missing=True,
-    version=2
 )
 
 app = modal.App("llama-cpp")
@@ -65,7 +65,7 @@ def start_server():
         "--retry-max-time", str(max_retry),
         "-H", f"Authorization: Bearer {api_key}",
         f"http://127.0.0.1:{PORT}/health"
-    ])
+    ], check=True)
 
     # payload = json.dumps({
     #     "model": AUTOLOAD_MODEL,
@@ -95,13 +95,6 @@ def start_server():
         f"http://127.0.0.1:{PORT}/models/load"
     ])
 
-
-@app.local_entrypoint()
-async def main():
-   url =  await Server.get_url.aio()
-   print(url)
-
-
 @app.server(
     port=PORT,
     gpu=f"{GPU_TYPE}:1",
@@ -127,3 +120,9 @@ class Server:
     @modal.exit()
     def exit(self):
         print("Exiting Llama server...")
+
+
+@app.local_entrypoint()
+async def main():
+   url =  await Server.get_url.aio()
+   print(url)
